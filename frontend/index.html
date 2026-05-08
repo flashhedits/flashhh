@@ -802,7 +802,7 @@ async function handleLogin(){
 }
 
 async function logoutUser(){
-  if(confirm('Log out of Spendly?')){
+  if(confirm('Are you sure you want to log out of Spendly?')){
     if(sb){await sb.auth.signOut();}
     localStorage.removeItem('spendly_user');
     localStorage.removeItem('spendly_expenses');
