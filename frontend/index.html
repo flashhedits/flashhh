@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Spendly — AI Expense Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ============ RESET & VARS ============ */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{
+  --green:#00c896;--green2:#009b73;--bg:#0a0b10;--card:#13141c;--card2:#1a1b26;
+  --border:rgba(255,255,255,0.07);--text:rgba(255,255,255,0.85);--sub:rgba(255,255,255,0.38);
+  --red:#ff6b6b;--amber:#ef9f27;--blue:#4a9eff;--purple:#9b8dff;
+  --font:'DM Sans',sans-serif;--mono:'DM Mono',monospace;
+}
+html,body{height:100%;background:#000;font-family:var(--font);overflow:hidden}
+
+/* ============ SHELL ============ */
+.shell{display:flex;justify-content:center;align-items:center;min-height:100vh;padding:0;background:radial-gradient(ellipse at 50% 0%,rgba(0,200,150,0.06) 0%,transparent 60%)}
+.phone{width:min(390px,100vw);height:min(844px,100vh);background:var(--bg);border-radius:clamp(0px,5vw,44px);overflow:hidden;border:1px solid rgba(255,255,255,0.06);display:flex;flex-direction:column;box-shadow:0 50px 100px rgba(0,0,0,0.7),0 0 0 0.5px rgba(255,255,255,0.04) inset;position:relative}
+.statusbar{display:flex;justify-content:space-between;align-items:center;padding:14px 24px 0;color:var(--sub);font-size:11px;font-family:var(--mono);flex-shrink:0}
+.content{flex:1;overflow:hidden;position:relative}
+.screen{display:none;height:100%;overflow-y:auto;padding-bottom:76px;scrollbar-width:none}
+.screen::-webkit-scrollbar{display:none}
+.screen.active{display:block}
+.screen.chat-screen{padding-bottom:0;display:flex;flex-direction:column}
+.screen.chat-screen.active{display:flex}
+
+/* ============ ONBOARDING ============ */
+#onboarding{position:absolute;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+#onboarding.hidden{display:none}
+
+/* Splash */
+.splash{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;padding:40px 32px}
+.splash-logo{width:80px;height:80px;border-radius:24px;background:linear-gradient(135deg,var(--green),var(--green2));display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:24px;box-shadow:0 20px 60px rgba(0,200,150,0.3);animation:logoIn 0.6s cubic-bezier(0.34,1.56,0.64,1)}
+@keyframes logoIn{from{transform:scale(0.5) rotate(-10deg);opacity:0}to{transform:scale(1) rotate(0);opacity:1}}
+.splash-title{font-size:32px;font-weight:700;color:#fff;letter-spacing:-1px;margin-bottom:8px;text-align:center;animation:fadeUp 0.5s 0.2s both ease}
+.splash-sub{font-size:15px;color:var(--sub);text-align:center;line-height:1.5;animation:fadeUp 0.5s 0.35s both ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* Onboarding slides */
+.ob-slides{flex:1;position:relative;overflow:hidden}
+.ob-slide{position:absolute;inset:0;display:flex;flex-direction:column;padding:0 28px;opacity:0;transform:translateX(40px);transition:all 0.35s cubic-bezier(0.4,0,0.2,1);pointer-events:none}
+.ob-slide.active{opacity:1;transform:translateX(0);pointer-events:all}
+.ob-slide.exit{opacity:0;transform:translateX(-40px)}
+.ob-illo{width:100%;flex:1;display:flex;align-items:center;justify-content:center;max-height:260px}
+.ob-illo-card{width:100%;max-width:300px;border-radius:24px;overflow:hidden;border:0.5px solid var(--border)}
+.ob-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,200,150,0.1);border:0.5px solid rgba(0,200,150,0.25);border-radius:20px;padding:6px 13px;font-size:11px;color:var(--green);font-weight:600;margin-bottom:16px;font-family:var(--mono)}
+.ob-title{font-size:26px;font-weight:700;color:#fff;letter-spacing:-0.5px;margin-bottom:10px;line-height:1.2}
+.ob-body{font-size:14px;color:var(--sub);line-height:1.65}
+
+/* Dots */
+.ob-dots{display:flex;gap:6px;justify-content:center;padding:16px 0}
+.ob-dot{width:6px;height:6px;border-radius:3px;background:rgba(255,255,255,0.15);transition:all 0.3s}
+.ob-dot.on{width:20px;background:var(--green)}
+
+/* Setup form */
+.ob-setup{flex:1;padding:0 28px;overflow-y:auto}
+.ob-setup-title{font-size:24px;font-weight:700;color:#fff;margin-bottom:6px;letter-spacing:-0.3px}
+.ob-setup-sub{font-size:13px;color:var(--sub);margin-bottom:28px;line-height:1.5}
+.ob-fl{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.ob-fl label{font-size:10px;color:var(--sub);letter-spacing:0.7px;font-family:var(--mono)}
+.ob-fi{background:var(--card);border:0.5px solid rgba(255,255,255,0.1);border-radius:14px;padding:14px 16px;color:#fff;font-size:15px;width:100%;font-family:var(--font);outline:none;transition:border-color 0.2s}
+.ob-fi:focus{border-color:var(--green)}
+.ob-fi::placeholder{color:rgba(255,255,255,0.2)}
+.avatar-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.av-opt{width:44px;height:44px;border-radius:50%;background:var(--card);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;transition:all 0.2s}
+.av-opt.sel{border-color:var(--green);background:rgba(0,200,150,0.1);transform:scale(1.1)}
+
+/* Nav footer */
+.ob-footer{padding:16px 28px 28px;display:flex;flex-direction:column;gap:10px;flex-shrink:0}
+.ob-btn-primary{width:100%;background:var(--green);border:none;border-radius:15px;padding:16px;color:#0a0b10;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);letter-spacing:0.1px;transition:all 0.15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.ob-btn-primary:active{transform:scale(0.98);opacity:0.9}
+.ob-btn-skip{background:none;border:none;font-size:13px;color:var(--sub);cursor:pointer;font-family:var(--font);padding:4px}
+
+/* Feature illustration cards */
+.feat-card{background:var(--card);border-radius:18px;padding:16px;border:0.5px solid var(--border)}
+.feat-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:12px}
+.feat-ttl{font-size:13px;font-weight:600;color:#fff;margin-bottom:4px}
+.feat-desc{font-size:12px;color:var(--sub);line-height:1.5}
+
+/* ============ BOTTOM NAV ============ */
+.bottomnav{display:flex;background:var(--card);border-top:0.5px solid var(--border);padding:8px 4px 14px;flex-shrink:0}
+.navitem{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:6px 2px;border:none;background:none;position:relative}
+.navicon{width:24px;height:24px;display:flex;align-items:center;justify-content:center}
+.navicon svg{width:20px;height:20px;fill:none;stroke:rgba(255,255,255,0.25);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:stroke 0.2s}
+.navlabel{font-size:9.5px;color:rgba(255,255,255,0.25);transition:color 0.2s;font-family:var(--font);letter-spacing:0.2px}
+.navitem.on .navicon svg{stroke:var(--green)}
+.navitem.on .navlabel{color:var(--green);font-weight:600}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:var(--green);position:absolute;top:3px;right:9px;display:none;border:1.5px solid var(--bg)}
+.nav-dot.show{display:block}
+
+/* ============ HOME ============ */
+.hero-card{background:linear-gradient(135deg,#13141c 0%,#191b28 100%);margin:14px 16px;border-radius:22px;padding:20px;border:0.5px solid rgba(0,200,150,0.12)}
+.hero-label{font-size:10px;color:var(--sub);letter-spacing:1px;margin-bottom:8px;font-family:var(--mono)}
+.hero-amount{font-size:36px;font-weight:700;color:#fff;letter-spacing:-1.5px;margin-bottom:4px;font-family:var(--mono)}
+.hero-bar-track{height:3px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;margin-top:14px}
+.hero-bar-fill{height:100%;border-radius:2px;background:var(--green);transition:width 0.8s ease,background 0.4s}
+.quick-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 14px}
+.qstat{background:var(--card);border-radius:14px;padding:14px;border:0.5px solid var(--border)}
+.qstat-label{font-size:9.5px;color:var(--sub);letter-spacing:0.6px;margin-bottom:6px;font-family:var(--mono)}
+.qstat-val{font-size:20px;font-weight:700;color:#fff;font-family:var(--mono)}
+.qstat-tag{font-size:10px;margin-top:4px;color:var(--green)}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin:0 16px 10px}
+.sec-title{font-size:10px;color:var(--sub);letter-spacing:0.8px;font-family:var(--mono)}
+.sec-link{font-size:11px;color:var(--green);background:none;border:none;cursor:pointer;font-family:var(--font);font-weight:500}
+
+/* ============ TRANSACTIONS ============ */
+.tx-list{padding:0 16px}
+.tx-item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:0.5px solid rgba(255,255,255,0.04)}
+.tx-item:last-child{border-bottom:none}
+.tx-ic{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:17px}
+.tx-info{flex:1;min-width:0}
+.tx-name{font-size:13px;color:#fff;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-cat{font-size:11px;color:var(--sub);margin-top:1px}
+.tx-right{text-align:right;flex-shrink:0}
+.tx-amt{font-size:13px;font-weight:600;color:var(--red);font-family:var(--mono)}
+.tx-src{font-size:10px;margin-top:2px}
+.src-w{color:var(--green)}.src-v{color:var(--blue)}.src-s{color:var(--amber)}.src-a{color:var(--sub)}
+
+/* ============ FORM ============ */
+.page-header{padding:22px 16px 14px}
+.page-title{font-size:19px;font-weight:700;color:#fff;letter-spacing:-0.3px}
+.page-sub{font-size:12px;color:var(--sub);margin-top:3px}
+.form-section{padding:0 16px}
+.fl{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.fl label{font-size:10px;color:var(--sub);letter-spacing:0.6px;font-family:var(--mono)}
+.fi{background:var(--card);border:0.5px solid rgba(255,255,255,0.1);border-radius:13px;padding:13px 15px;color:#fff;font-size:14px;width:100%;font-family:var(--font);outline:none;transition:border-color 0.2s}
+.fi:focus{border-color:var(--green)}
+.fi::placeholder{color:rgba(255,255,255,0.2)}
+.fi option{background:#0a0b10;color:#fff}
+.cat-suggest{background:rgba(0,200,150,0.08);border:0.5px solid rgba(0,200,150,0.25);border-radius:12px;padding:11px 13px;margin-bottom:14px;display:none}
+.cat-suggest.show{display:block}
+.cat-sug-label{font-size:9.5px;color:var(--green);letter-spacing:0.6px;margin-bottom:5px;font-family:var(--mono)}
+.cat-sug-row{display:flex;align-items:center;gap:8px}
+.cat-sug-icon{font-size:20px}.cat-sug-name{font-size:14px;font-weight:600;color:#fff}.cat-sug-conf{font-size:11px;color:var(--sub);margin-left:auto}
+.ai-thinking{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--sub);margin-bottom:14px}
+.dots span{display:inline-block;width:4px;height:4px;border-radius:50%;background:var(--green);animation:blink 1.2s infinite}
+.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:0.15}40%{opacity:1}}
+.submit-btn{width:100%;background:var(--green);border:none;border-radius:14px;padding:16px;color:#0a0b10;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:4px;transition:all 0.15s}
+.submit-btn:active{transform:scale(0.99);opacity:0.85}
+
+/* ============ SCAN ============ */
+.scan-drop{background:var(--card);border:1.5px dashed rgba(255,255,255,0.1);border-radius:18px;padding:32px 20px;text-align:center;margin:0 16px;cursor:pointer;transition:border-color 0.2s}
+.scan-drop:hover,.scan-drop.drag{border-color:var(--green)}
+.scan-icon{width:50px;height:50px;margin:0 auto 14px;background:rgba(0,200,150,0.1);border-radius:14px;display:flex;align-items:center;justify-content:center}
+.scan-icon svg{width:24px;height:24px;stroke:var(--green);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.scan-title{font-size:14px;font-weight:600;color:#fff;margin-bottom:4px}
+.scan-sub{font-size:12px;color:var(--sub)}
+.scan-btn{display:inline-block;margin-top:14px;background:rgba(0,200,150,0.12);border:0.5px solid rgba(0,200,150,0.35);border-radius:10px;padding:9px 20px;color:var(--green);font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.scan-result{background:var(--card);border-radius:16px;margin:12px 16px 0;padding:16px;border:0.5px solid var(--border);display:none}
+.scan-result.show{display:block}
+.scan-result-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.scan-result-label{font-size:10px;color:var(--green);letter-spacing:0.6px;font-family:var(--mono)}
+.scan-field{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.05)}
+.scan-field:last-child{border-bottom:none}
+.sf-key{font-size:12px;color:var(--sub)}.sf-val{font-size:13px;font-weight:500;color:#fff}
+.scan-add-btn{width:100%;background:var(--green);border:none;border-radius:12px;padding:13px;color:#0a0b10;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:12px}
+
+/* ============ ADVISOR ============ */
+.advisor-tab-row{display:flex;gap:6px;margin:0 16px 14px}
+.atab{flex:1;padding:9px 4px;border-radius:11px;border:0.5px solid var(--border);background:transparent;color:var(--sub);font-size:12px;cursor:pointer;font-family:var(--font);transition:all 0.2s;text-align:center}
+.atab.on{background:rgba(0,200,150,0.1);border-color:rgba(0,200,150,0.35);color:var(--green);font-weight:600}
+.advice-panel{display:none}.advice-panel.on{display:block}
+.advice-card{background:var(--card);border-radius:16px;padding:15px;border:0.5px solid var(--border);margin:0 16px 10px}
+.ac-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ac-icon{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.ac-title{font-size:13px;font-weight:600;color:#fff}
+.ac-body{font-size:12px;color:rgba(255,255,255,0.5);line-height:1.65}
+.ac-metric{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.04)}
+.ac-metric:last-child{border-bottom:none}
+.acm-label{font-size:12px;color:var(--sub)}.acm-val{font-size:12px;font-weight:600;color:#fff;font-family:var(--mono)}
+.acm-val.good{color:var(--green)}.acm-val.warn{color:var(--amber)}.acm-val.bad{color:var(--red)}
+.progress-row{margin-bottom:11px}
+.pr-head{display:flex;justify-content:space-between;margin-bottom:5px}
+.pr-label{font-size:12px;color:rgba(255,255,255,0.6)}.pr-val{font-size:11px;color:var(--sub);font-family:var(--mono)}
+.pr-track{height:4px;background:rgba(255,255,255,0.05);border-radius:2px;overflow:hidden}
+.pr-fill{height:100%;border-radius:2px;transition:width 0.8s ease}
+.tag-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600;font-family:var(--mono)}
+.tag-green{background:rgba(0,200,150,0.12);color:var(--green)}
+.tag-amber{background:rgba(239,159,39,0.12);color:var(--amber)}
+.tag-red{background:rgba(255,107,107,0.12);color:var(--red)}
+.load-ai{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;gap:12px}
+.load-ring{width:34px;height:34px;border-radius:50%;border:2px solid rgba(0,200,150,0.12);border-top-color:var(--green);animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-text{font-size:12px;color:var(--sub)}
+
+/* ============ DONUT CHART ============ */
+.chart-wrap{margin:0 16px 14px;background:var(--card);border-radius:18px;padding:16px;border:0.5px solid var(--border)}
+.chart-title{font-size:10px;color:var(--sub);letter-spacing:0.8px;margin-bottom:14px;font-family:var(--mono)}
+.donut-row{display:flex;align-items:center;gap:16px}
+.legend{flex:1;display:flex;flex-direction:column;gap:7px}
+.leg-item{display:flex;align-items:center;gap:7px}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.leg-label{font-size:11px;color:var(--sub);flex:1}
+.leg-val{font-size:11px;font-weight:600;color:rgba(255,255,255,0.7);font-family:var(--mono)}
+
+/* ============ CHAT BOT ============ */
+.chat-header{background:var(--card);padding:14px 16px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:11px;flex-shrink:0}
+.chat-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green2));display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.chat-hname{font-size:14px;font-weight:600;color:#fff}
+.chat-hstatus{font-size:11px;color:var(--green);display:flex;align-items:center;gap:4px;margin-top:1px}
+.online-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse2 2s infinite}
+@keyframes pulse2{0%,100%{opacity:1}50%{opacity:0.4}}
+.chat-hbadge{background:rgba(0,200,150,0.12);border:0.5px solid rgba(0,200,150,0.25);border-radius:8px;padding:4px 9px;font-size:10px;color:var(--green);font-weight:600;font-family:var(--mono);margin-left:auto}
+.quick-chips{display:flex;gap:6px;overflow-x:auto;padding:10px 14px 0;scrollbar-width:none;flex-shrink:0}
+.quick-chips::-webkit-scrollbar{display:none}
+.chip{background:var(--card2);border:0.5px solid var(--border);border-radius:20px;padding:7px 13px;font-size:11.5px;color:rgba(255,255,255,0.55);white-space:nowrap;cursor:pointer;font-family:var(--font);flex-shrink:0;transition:all 0.2s}
+.chip:active{background:rgba(0,200,150,0.1);border-color:rgba(0,200,150,0.3);color:var(--green)}
+.chat-messages{padding:14px 14px 10px;display:flex;flex-direction:column;gap:10px;flex:1;overflow-y:auto;scrollbar-width:none}
+.chat-messages::-webkit-scrollbar{display:none}
+.msg{display:flex;flex-direction:column;max-width:82%;animation:msgIn 0.2s ease}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg.bot{align-self:flex-start;align-items:flex-start}
+.msg.user{align-self:flex-end;align-items:flex-end}
+.msg-bubble{padding:10px 13px;border-radius:16px;font-size:13px;line-height:1.55}
+.msg.bot .msg-bubble{background:var(--card2);color:var(--text);border-bottom-left-radius:4px;border:0.5px solid var(--border)}
+.msg.user .msg-bubble{background:linear-gradient(135deg,var(--green),var(--green2));color:#0a0b10;border-bottom-right-radius:4px;font-weight:500}
+.msg-time{font-size:10px;color:var(--sub);margin-top:3px;font-family:var(--mono)}
+.msg-expense-card{background:rgba(0,200,150,0.08);border:0.5px solid rgba(0,200,150,0.2);border-radius:12px;padding:10px 12px;margin-top:6px}
+.mec-row{display:flex;justify-content:space-between;margin-bottom:3px}
+.mec-label{font-size:12px;color:var(--sub)}.mec-val{font-size:12px;font-weight:600;color:#fff;font-family:var(--mono)}
+.typing-bubble{background:var(--card2);border:0.5px solid var(--border);border-radius:16px;border-bottom-left-radius:4px;padding:12px 14px;display:none;align-self:flex-start}
+.typing-bubble.show{display:flex;gap:4px;align-items:center}
+.typing-dot{width:6px;height:6px;border-radius:50%;background:var(--sub);animation:blink 1.2s infinite}
+.typing-dot:nth-child(2){animation-delay:.2s}.typing-dot:nth-child(3){animation-delay:.4s}
+.voice-banner{background:rgba(255,107,107,0.08);border:0.5px solid rgba(255,107,107,0.2);border-radius:12px;padding:10px 14px;margin:6px 14px 0;display:none;align-items:center;gap:10px;flex-shrink:0}
+.voice-banner.show{display:flex}
+.vb-waves{display:flex;gap:3px;align-items:center}
+.vb-bar{width:3px;border-radius:2px;background:var(--red);animation:vbW 1s ease infinite}
+.vb-bar:nth-child(1){height:10px}.vb-bar:nth-child(2){height:18px;animation-delay:.1s}.vb-bar:nth-child(3){height:14px;animation-delay:.2s}.vb-bar:nth-child(4){height:20px;animation-delay:.15s}.vb-bar:nth-child(5){height:10px;animation-delay:.05s}
+@keyframes vbW{0%,100%{opacity:0.4;transform:scaleY(0.6)}50%{opacity:1;transform:scaleY(1)}}
+.vb-text{font-size:12px;color:var(--red);font-weight:500}
+.chat-input-bar{background:var(--card);border-top:0.5px solid var(--border);padding:10px 12px 18px;display:flex;align-items:flex-end;gap:8px;flex-shrink:0}
+.chat-input{flex:1;background:var(--card2);border:0.5px solid var(--border);border-radius:22px;padding:11px 16px;color:#fff;font-size:13.5px;font-family:var(--font);outline:none;resize:none;max-height:90px;min-height:42px;line-height:1.4;transition:border-color 0.2s}
+.chat-input:focus{border-color:rgba(0,200,150,0.4)}
+.chat-input::placeholder{color:rgba(255,255,255,0.2)}
+.mic-btn{width:42px;height:42px;border-radius:50%;border:0.5px solid var(--border);background:var(--card2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.2s}
+.mic-btn svg{width:18px;height:18px;stroke:var(--sub);fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;transition:stroke 0.2s}
+.mic-btn.listening{background:rgba(255,107,107,0.12);border-color:var(--red);animation:micP 1s infinite}
+.mic-btn.listening svg{stroke:var(--red)}
+@keyframes micP{0%,100%{box-shadow:0 0 0 0 rgba(255,107,107,0.3)}50%{box-shadow:0 0 0 8px rgba(255,107,107,0)}}
+.send-btn{width:42px;height:42px;border-radius:50%;background:var(--green);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform 0.15s}
+.send-btn:active{transform:scale(0.92)}
+.send-btn svg{width:18px;height:18px;stroke:#0a0b10;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ============ MISC ============ */
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);background:var(--green);color:#0a0b10;font-size:12px;font-weight:600;padding:9px 18px;border-radius:22px;white-space:nowrap;opacity:0;transition:opacity 0.3s;pointer-events:none;z-index:999;font-family:var(--font)}
+.toast.show{opacity:1}
+.wa-hint{background:rgba(0,200,150,0.06);border:0.5px solid rgba(0,200,150,0.15);border-radius:14px;padding:13px;margin:0 16px 16px;display:flex;gap:10px;align-items:center}
+.wa-icon{width:30px;height:30px;border-radius:9px;background:rgba(0,200,150,0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="shell">
+<div class="phone">
+  <div class="statusbar"><span id="clock">9:41</span><span style="font-size:9px;letter-spacing:1px">●●●</span></div>
+
+  <!-- ============ ONBOARDING ============ -->
+  <div id="onboarding">
+
+    <!-- SLIDE 0: Welcome / Auth choice -->
+    <div id="ob0" style="flex:1;display:flex;flex-direction:column">
+      <div class="splash">
+        <div class="splash-logo">💰</div>
+        <div class="splash-title">Spendly</div>
+        <div class="splash-sub">Track every rupee.<br>Let AI do the thinking.</div>
+      </div>
+      <div class="ob-footer">
+        <button class="ob-btn-primary" onclick="goSlide('signup')">Create account →</button>
+        <button class="ob-btn-skip" onclick="goSlide('login')">I already have an account</button>
+      </div>
+    </div>
+
+    <!-- SIGNUP SCREEN -->
+    <div id="ob-signup" style="flex:1;display:none;flex-direction:column">
+      <div class="ob-setup" style="padding-top:32px">
+        <button onclick="goSlide(0)" style="background:none;border:none;color:var(--sub);font-size:13px;margin-bottom:18px;cursor:pointer;font-family:var(--font);padding:0">← Back</button>
+        <div class="ob-setup-title">Create your account</div>
+        <div class="ob-setup-sub">Free forever. No card required.</div>
+        <div class="ob-fl">
+          <label>FULL NAME</label>
+          <input class="ob-fi" id="su-name" placeholder="Ahmed Khan" maxlength="40" autocomplete="name">
+        </div>
+        <div class="ob-fl">
+          <label>EMAIL</label>
+          <input class="ob-fi" id="su-email" type="email" placeholder="ahmed@email.com" autocomplete="email">
+        </div>
+        <div class="ob-fl">
+          <label>PASSWORD (MIN 6 CHARS)</label>
+          <input class="ob-fi" id="su-pass" type="password" placeholder="••••••••" autocomplete="new-password" minlength="6">
+        </div>
+        <div id="su-error" style="font-size:12px;color:var(--red);margin-top:4px;display:none"></div>
+        <div style="font-size:11px;color:var(--sub);margin-top:14px;line-height:1.5">By creating an account you agree to use Spendly responsibly. Your data is private and stored securely.</div>
+      </div>
+      <div class="ob-footer">
+        <button class="ob-btn-primary" id="su-btn" onclick="handleSignUp()">Create account 🚀</button>
+        <button class="ob-btn-skip" onclick="goSlide('login')">Already have an account? Log in</button>
+      </div>
+    </div>
+
+    <!-- LOGIN SCREEN -->
+    <div id="ob-login" style="flex:1;display:none;flex-direction:column">
+      <div class="ob-setup" style="padding-top:32px">
+        <button onclick="goSlide(0)" style="background:none;border:none;color:var(--sub);font-size:13px;margin-bottom:18px;cursor:pointer;font-family:var(--font);padding:0">← Back</button>
+        <div class="ob-setup-title">Welcome back 👋</div>
+        <div class="ob-setup-sub">Log in to your Spendly account.</div>
+        <div class="ob-fl">
+          <label>EMAIL</label>
+          <input class="ob-fi" id="li-email" type="email" placeholder="ahmed@email.com" autocomplete="email">
+        </div>
+        <div class="ob-fl">
+          <label>PASSWORD</label>
+          <input class="ob-fi" id="li-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div id="li-error" style="font-size:12px;color:var(--red);margin-top:4px;display:none"></div>
+        <div style="font-size:11px;color:var(--sub);margin-top:14px">Demo mode? Use <span style="color:var(--green)">demo@spendly.app</span> / <span style="color:var(--green)">demo123</span></div>
+      </div>
+      <div class="ob-footer">
+        <button class="ob-btn-primary" id="li-btn" onclick="handleLogin()">Log in</button>
+        <button class="ob-btn-skip" onclick="goSlide('signup')">New to Spendly? Sign up</button>
+      </div>
+    </div>
+
+    <!-- SLIDE 1: Bot feature -->
+    <div id="ob1" style="flex:1;display:none;flex-direction:column">
+      <div style="flex:1;padding:28px 28px 0;overflow-y:auto">
+        <div class="ob-badge">01 / 03</div>
+        <div class="ob-title">Track with a<br>simple message</div>
+        <div class="ob-body" style="margin-bottom:24px">Just type what you spent — like texting a friend. Our AI bot understands natural language and logs it instantly.</div>
+        <!-- Mini chat preview -->
+        <div style="background:var(--card);border-radius:18px;padding:14px;border:0.5px solid var(--border)">
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="align-self:flex-end;background:linear-gradient(135deg,var(--green),var(--green2));color:#0a0b10;border-radius:14px;border-bottom-right-radius:4px;padding:8px 13px;font-size:12px;font-weight:500">KFC lunch 850</div>
+            <div style="align-self:flex-start;background:var(--card2);border:0.5px solid var(--border);border-radius:14px;border-bottom-left-radius:4px;padding:8px 13px;font-size:12px;color:var(--text)">KFC logged! 🍗 Rs 850 added to Food.</div>
+            <div style="align-self:flex-end;background:linear-gradient(135deg,var(--green),var(--green2));color:#0a0b10;border-radius:14px;border-bottom-right-radius:4px;padding:8px 13px;font-size:12px;font-weight:500">petrol 3500</div>
+            <div style="align-self:flex-start;background:var(--card2);border:0.5px solid var(--border);border-radius:14px;border-bottom-left-radius:4px;padding:8px 13px;font-size:12px;color:var(--text)">Fuelled up! ⛽ Rs 3,500 for Transport.</div>
+          </div>
+        </div>
+      </div>
+      <div class="ob-dots"><div class="ob-dot on"></div><div class="ob-dot"></div><div class="ob-dot"></div></div>
+      <div class="ob-footer" style="padding-top:0">
+        <button class="ob-btn-primary" onclick="goSlide(2)">Next →</button>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: Scan feature -->
+    <div id="ob2" style="flex:1;display:none;flex-direction:column">
+      <div style="flex:1;padding:28px 28px 0;overflow-y:auto">
+        <div class="ob-badge">02 / 03</div>
+        <div class="ob-title">Snap a receipt.<br>Done.</div>
+        <div class="ob-body" style="margin-bottom:24px">Photo of any receipt — Claude's vision AI reads it and extracts merchant, amount, items and date automatically.</div>
+        <div style="background:var(--card);border-radius:18px;padding:16px;border:0.5px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <div style="width:32px;height:32px;background:rgba(0,200,150,0.12);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px">📷</div>
+            <div style="font-size:12px;color:var(--green);font-weight:600">CLAUDE EXTRACTED</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--sub)">Merchant</span><span style="font-size:12px;color:#fff;font-weight:500">The Coffee House</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--sub)">Amount</span><span style="font-size:12px;color:#fff;font-weight:500;font-family:var(--mono)">Rs 1,240</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--sub)">Category</span><span style="font-size:12px;color:var(--green);font-weight:600">☕ Food</span></div>
+            <div style="display:flex;justify-content:space-between"><span style="font-size:12px;color:var(--sub)">Date</span><span style="font-size:12px;color:#fff;font-weight:500">Today</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ob-dots"><div class="ob-dot"></div><div class="ob-dot on"></div><div class="ob-dot"></div></div>
+      <div class="ob-footer" style="padding-top:0">
+        <button class="ob-btn-primary" onclick="goSlide(3)">Next →</button>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: Advisor feature -->
+    <div id="ob3" style="flex:1;display:none;flex-direction:column">
+      <div style="flex:1;padding:28px 28px 0;overflow-y:auto">
+        <div class="ob-badge">03 / 03</div>
+        <div class="ob-title">AI that actually<br>gives advice.</div>
+        <div class="ob-body" style="margin-bottom:24px">Get real insights on your spending patterns, saving tips, and investment suggestions — all personalised to your habits.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="background:var(--card);border-radius:14px;padding:14px;border:0.5px solid var(--border)">
+            <div style="font-size:22px;margin-bottom:8px">📊</div>
+            <div style="font-size:12px;font-weight:600;color:#fff;margin-bottom:4px">Spending</div>
+            <div style="font-size:11px;color:var(--sub)">See where every rupee goes</div>
+          </div>
+          <div style="background:var(--card);border-radius:14px;padding:14px;border:0.5px solid var(--border)">
+            <div style="font-size:22px;margin-bottom:8px">💡</div>
+            <div style="font-size:12px;font-weight:600;color:#fff;margin-bottom:4px">Saving tips</div>
+            <div style="font-size:11px;color:var(--sub)">Cuts tailored to your habits</div>
+          </div>
+          <div style="background:var(--card);border-radius:14px;padding:14px;border:0.5px solid var(--border)">
+            <div style="font-size:22px;margin-bottom:8px">📈</div>
+            <div style="font-size:12px;font-weight:600;color:#fff;margin-bottom:4px">Investing</div>
+            <div style="font-size:11px;color:var(--sub)">PSX, Meezan, Gold</div>
+          </div>
+          <div style="background:var(--card);border-radius:14px;padding:14px;border:0.5px solid var(--border)">
+            <div style="font-size:22px;margin-bottom:8px">🎤</div>
+            <div style="font-size:12px;font-weight:600;color:#fff;margin-bottom:4px">Voice input</div>
+            <div style="font-size:11px;color:var(--sub)">Speak your expenses</div>
+          </div>
+        </div>
+      </div>
+      <div class="ob-dots"><div class="ob-dot"></div><div class="ob-dot"></div><div class="ob-dot on"></div></div>
+      <div class="ob-footer" style="padding-top:0">
+        <button class="ob-btn-primary" onclick="goSlide(4)">Set up my account →</button>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: Setup -->
+    <div id="ob4" style="flex:1;display:none;flex-direction:column">
+      <div class="ob-setup" style="padding-top:28px">
+        <div class="ob-setup-title">Quick setup</div>
+        <div class="ob-setup-sub">Takes 30 seconds. Personalises everything.</div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:10px;color:var(--sub);letter-spacing:0.7px;font-family:var(--mono);margin-bottom:10px">CHOOSE YOUR AVATAR</div>
+          <div class="avatar-row" id="avatar-row">
+            <div class="av-opt sel" onclick="selAvatar(this,'😎')">😎</div>
+            <div class="av-opt" onclick="selAvatar(this,'👨‍💻')">👨‍💻</div>
+            <div class="av-opt" onclick="selAvatar(this,'👩‍💻')">👩‍💻</div>
+            <div class="av-opt" onclick="selAvatar(this,'🧑‍🎓')">🧑‍🎓</div>
+            <div class="av-opt" onclick="selAvatar(this,'🦁')">🦁</div>
+            <div class="av-opt" onclick="selAvatar(this,'🐼')">🐼</div>
+          </div>
+        </div>
+        <div class="ob-fl">
+          <label>YOUR NAME</label>
+          <input class="ob-fi" id="ob-name" placeholder="Ahmed, Sara, Ali…" maxlength="20">
+        </div>
+        <div class="ob-fl">
+          <label>MONTHLY BUDGET (RS)</label>
+          <input class="ob-fi" id="ob-budget" type="number" placeholder="50000">
+        </div>
+        <div class="ob-fl">
+          <label>MONTHLY INCOME (RS) — OPTIONAL</label>
+          <input class="ob-fi" id="ob-income" type="number" placeholder="80000">
+        </div>
+      </div>
+      <div class="ob-footer">
+        <button class="ob-btn-primary" onclick="completeSetup()">Enter Spendly 🚀</button>
+      </div>
+    </div>
+
+  </div>
+  <!-- END ONBOARDING -->
+
+  <!-- ============ MAIN APP ============ -->
+  <div class="content">
+    <div class="toast" id="toast"></div>
+
+    <!-- HOME -->
+    <div id="sc-home" class="screen active">
+      <div style="padding:20px 16px 10px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:11px;color:var(--sub);margin-bottom:2px" id="greeting">Good morning 👋</div>
+          <div style="font-size:17px;font-weight:700;color:#fff;letter-spacing:-0.3px" id="h-username">Ahmed</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button onclick="nav('sc-add','nav-add')" style="width:32px;height:32px;border-radius:50%;background:rgba(0,200,150,0.1);border:0.5px solid rgba(0,200,150,0.25);display:flex;align-items:center;justify-content:center;cursor:pointer">
+            <svg width="16" height="16" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <div id="h-avatar" onclick="logoutUser()" style="width:34px;height:34px;border-radius:50%;background:rgba(0,200,150,0.12);display:flex;align-items:center;justify-content:center;font-size:16px;border:0.5px solid rgba(0,200,150,0.2);cursor:pointer" title="Tap to log out">😎</div>
+        </div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-label" id="h-month-label">TOTAL SPENT — THIS MONTH</div>
+        <div class="hero-amount" id="h-total">Rs 0</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
+          <div style="font-size:12px;color:var(--sub)">Budget <span id="h-budget-display">Rs 50,000</span> · <span style="color:var(--green)" id="h-left">Rs 50,000 left</span></div>
+          <div style="font-size:13px;font-weight:700;color:#fff;font-family:var(--mono)" id="h-pct">0%</div>
+        </div>
+        <div class="hero-bar-track"><div class="hero-bar-fill" id="h-bar" style="width:0%"></div></div>
+      </div>
+      <div class="quick-stats">
+        <div class="qstat"><div class="qstat-label">TRANSACTIONS</div><div class="qstat-val" id="h-txc">0</div><div class="qstat-tag" id="h-bot-count">+0 via bot</div></div>
+        <div class="qstat"><div class="qstat-label">BIGGEST SPEND</div><div class="qstat-val" id="h-big-amt">—</div><div class="qstat-tag" style="color:var(--sub)" id="h-big-cat">No data yet</div></div>
+      </div>
+      <div class="chart-wrap" id="chart-wrap" style="display:none">
+        <div class="chart-title">SPENDING BY CATEGORY</div>
+        <div class="donut-row">
+          <svg width="100" height="100" viewBox="0 0 100 100" id="donut-chart"><circle cx="50" cy="50" r="36" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="14"/></svg>
+          <div class="legend" id="donut-legend"></div>
+        </div>
+      </div>
+      <div id="empty-state" style="padding:32px 16px;text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">💸</div>
+        <div style="font-size:14px;font-weight:600;color:#fff;margin-bottom:6px">No expenses yet</div>
+        <div style="font-size:12px;color:var(--sub)">Tap the Bot tab and tell it what you spent</div>
+      </div>
+      <div class="section-head" id="h-tx-head" style="display:none"><span class="sec-title">RECENT TRANSACTIONS</span><button class="sec-link" onclick="nav('sc-tx','nav-tx')">see all</button></div>
+      <div class="tx-list" id="home-txlist"></div>
+      <div class="wa-hint" id="bot-hint">
+        <div class="wa-icon"><svg width="15" height="15" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+        <div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--green);margin-bottom:2px">Spendly Bot</div><div style="font-size:11px;color:var(--sub)">Type or speak your expenses — AI logs them instantly</div></div>
+        <button onclick="nav('sc-chat','nav-chat')" style="background:rgba(0,200,150,0.1);border:0.5px solid rgba(0,200,150,0.25);border-radius:10px;padding:7px 12px;color:var(--green);font-size:11px;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap">Open Bot</button>
+      </div>
+    </div>
+
+    <!-- ADD -->
+    <div id="sc-add" class="screen">
+      <div class="page-header"><div class="page-title">Add expense</div><div class="page-sub">AI auto-categorises as you type</div></div>
+      <div class="form-section">
+        <div class="fl"><label>WHAT DID YOU SPEND ON?</label><input class="fi" id="f-desc" placeholder="e.g. KFC dinner, petrol…" oninput="onDescInput(this.value)"></div>
+        <div class="cat-suggest" id="cat-box">
+          <div class="cat-sug-label">✦ AI SUGGESTION</div>
+          <div class="cat-sug-row"><div class="cat-sug-icon" id="cs-icon"></div><div class="cat-sug-name" id="cs-name"></div><div class="cat-sug-conf" id="cs-conf"></div></div>
+        </div>
+        <div class="ai-thinking" id="ai-think" style="display:none"><div class="dots"><span></span><span></span><span></span></div><span>Categorising…</span></div>
+        <div class="fl"><label>AMOUNT (RS)</label><input class="fi" id="f-amt" type="number" placeholder="0"></div>
+        <div class="fl"><label>CATEGORY</label>
+          <select class="fi" id="f-cat">
+            <option value="">Auto-detected</option>
+            <option>Food</option><option>Transport</option><option>Education</option><option>Shopping</option><option>Health</option><option>Entertainment</option><option>Utilities</option><option>Savings</option>
+          </select>
+        </div>
+        <div class="fl"><label>DATE</label><input class="fi" id="f-date" type="date"></div>
+        <div class="fl"><label>EMOTION TAG</label>
+          <select class="fi" id="f-emo">
+            <option value="">Skip</option><option>Happy</option><option>Neutral</option><option>Stressed</option><option>Bored</option><option>Peer pressure</option><option>Regret</option>
+          </select>
+        </div>
+        <button class="submit-btn" onclick="saveExpense()">Save expense</button>
+      </div>
+    </div>
+
+    <!-- BOT CHAT -->
+    <div id="sc-chat" class="screen chat-screen">
+      <div class="chat-header">
+        <div class="chat-avatar">🤖</div>
+        <div style="flex:1">
+          <div class="chat-hname">Spendly Bot</div>
+          <div class="chat-hstatus"><span class="online-dot"></span>Online — always logging</div>
+        </div>
+        <div class="chat-hbadge">AI</div>
+      </div>
+      <div class="quick-chips">
+        <div class="chip" onclick="chipSend('KFC 850')">🍕 KFC 850</div>
+        <div class="chip" onclick="chipSend('Careem 450')">🚗 Careem 450</div>
+        <div class="chip" onclick="chipSend('Groceries 2800')">🛒 Groceries</div>
+        <div class="chip" onclick="chipSend('Electricity bill 4500')">⚡ Utility</div>
+        <div class="chip" onclick="chipSend('Netflix 1100')">🎬 Netflix</div>
+      </div>
+      <div class="voice-banner" id="voice-banner">
+        <div class="vb-waves"><div class="vb-bar"></div><div class="vb-bar"></div><div class="vb-bar"></div><div class="vb-bar"></div><div class="vb-bar"></div></div>
+        <div class="vb-text">Listening… speak your expense</div>
+      </div>
+      <div class="chat-messages" id="chat-messages">
+        <div class="typing-bubble" id="typing-bubble"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>
+      </div>
+      <div class="chat-input-bar">
+        <textarea class="chat-input" id="chat-input" placeholder="Type your expense… or tap 🎤" rows="1" onkeydown="chatKeydown(event)" oninput="autoResize(this)"></textarea>
+        <button class="mic-btn" id="mic-btn" onclick="toggleVoice()">
+          <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0014 0"/><line x1="12" y1="21" x2="12" y2="17"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
+        </button>
+        <button class="send-btn" onclick="sendChatMessage()">
+          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- SCAN -->
+    <div id="sc-scan" class="screen">
+      <div class="page-header"><div class="page-title">Receipt scanner</div><div class="page-sub">Snap or upload — Claude reads it</div></div>
+      <div class="scan-drop" id="drop-zone" onclick="document.getElementById('file-inp').click()" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+        <div class="scan-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+        <div class="scan-title">Upload receipt photo</div>
+        <div class="scan-sub">JPEG, PNG, WebP supported</div>
+        <div class="scan-btn">Choose photo</div>
+        <input type="file" id="file-inp" accept="image/*" style="display:none" onchange="handleFile(this)">
+      </div>
+      <div style="margin:12px 16px;text-align:center;font-size:11px;color:rgba(255,255,255,0.2);letter-spacing:0.5px">— OR TRY A DEMO —</div>
+      <div style="margin:0 16px;display:flex;gap:8px">
+        <button style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:11px 6px;color:var(--sub);font-size:12px;cursor:pointer;font-family:var(--font)" onclick="demoScan('food')">☕ Cafe</button>
+        <button style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:11px 6px;color:var(--sub);font-size:12px;cursor:pointer;font-family:var(--font)" onclick="demoScan('fuel')">⛽ Petrol</button>
+        <button style="flex:1;background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:11px 6px;color:var(--sub);font-size:12px;cursor:pointer;font-family:var(--font)" onclick="demoScan('edu')">🎓 Uni fee</button>
+      </div>
+      <div class="scan-result" id="scan-result">
+        <div class="scan-result-head">
+          <div style="width:22px;height:22px;background:rgba(0,200,150,0.12);border-radius:7px;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" fill="none" stroke="var(--green)" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="scan-result-label">CLAUDE EXTRACTED</div>
+        </div>
+        <div class="scan-fields" id="scan-fields"></div>
+        <button class="scan-add-btn" onclick="addFromScan()">Add to expenses ↗</button>
+      </div>
+    </div>
+
+    <!-- ADVISOR -->
+    <div id="sc-advisor" class="screen">
+      <div class="page-header"><div class="page-title">AI advisor</div><div class="page-sub">Personalised financial guidance</div></div>
+      <div class="advisor-tab-row">
+        <button class="atab on" id="tab-spend" onclick="switchTab('spend')">Spending</button>
+        <button class="atab" id="tab-save" onclick="switchTab('save')">Saving</button>
+        <button class="atab" id="tab-invest" onclick="switchTab('invest')">Investing</button>
+      </div>
+      <div id="panel-spend" class="advice-panel on">
+        <div class="advice-card">
+          <div class="ac-head"><div class="ac-icon" style="background:rgba(255,107,107,0.12)">⚠️</div><div class="ac-title">Where your money is going</div></div>
+          <div id="advisor-breakdown"><div style="font-size:12px;color:var(--sub);padding:8px 0">Add some expenses to see your breakdown.</div></div>
+        </div>
+        <div class="advice-card">
+          <div class="ac-head"><div class="ac-icon" style="background:rgba(239,159,39,0.12)">🚨</div><div class="ac-title">Spending alerts</div></div>
+          <div class="ac-metric"><span class="acm-label">Food vs budget norm</span><span class="acm-val warn" id="adv-food-alert">—</span></div>
+          <div class="ac-metric"><span class="acm-label">Transport this month</span><span class="acm-val" id="adv-transport">—</span></div>
+          <div class="ac-metric"><span class="acm-label">Budget adherence</span><span class="acm-val good" id="adv-budget">—</span></div>
+        </div>
+      </div>
+      <div id="panel-save" class="advice-panel" style="display:none">
+        <div class="advice-card">
+          <div class="ac-head"><div class="ac-icon" style="background:rgba(0,200,150,0.12)">💰</div><div class="ac-title">Your saving potential</div></div>
+          <div class="ac-metric"><span class="acm-label">Monthly income</span><span class="acm-val" id="adv-income">Set in profile</span></div>
+          <div class="ac-metric"><span class="acm-label">Current savings rate</span><span class="acm-val warn" id="adv-save-rate">—</span></div>
+          <div class="ac-metric"><span class="acm-label">Recommended rate</span><span class="acm-val good">20% of income</span></div>
+        </div>
+        <div class="advice-card">
+          <div class="ac-head"><div class="ac-icon" style="background:rgba(0,200,150,0.12)">📋</div><div class="ac-title">3 ways to save this month</div></div>
+          <div class="ac-body">
+            <div style="padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.05)"><span class="tag-pill tag-green">Tip 1</span><span style="margin-left:7px;font-size:12px;color:rgba(255,255,255,0.55)">Meal prep 2 dinners/week at home</span></div>
+            <div style="padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.05)"><span class="tag-pill tag-amber">Tip 2</span><span style="margin-left:7px;font-size:12px;color:rgba(255,255,255,0.55)">Switch Careem to Metro 3×/week</span></div>
+            <div style="padding:8px 0"><span class="tag-pill tag-red">Tip 3</span><span style="margin-left:7px;font-size:12px;color:rgba(255,255,255,0.55)">Audit subscriptions (Netflix, etc.)</span></div>
+          </div>
+        </div>
+      </div>
+      <div id="panel-invest" class="advice-panel" style="display:none">
+        <div class="advice-card">
+          <div class="ac-head"><div class="ac-icon" style="background:rgba(155,141,255,0.12)">📈</div><div class="ac-title">Investment readiness</div></div>
+          <div class="ac-metric"><span class="acm-label">Investable surplus</span><span class="acm-val good" id="adv-surplus">—</span></div>
+          <div class="ac-metric"><span class="acm-label">Risk profile</span><span class="acm-val">Moderate</span></div>
+        </div>
+        <div class="advice-card">
+          <div class="ac-head"><div class="ac-icon" style="background:rgba(155,141,255,0.12)">%</div><div class="ac-title">Suggested allocation</div></div>
+          <div class="progress-row"><div class="pr-head"><span class="pr-label">Meezan savings account</span><span class="pr-val">50%</span></div><div class="pr-track"><div class="pr-fill" style="width:50%;background:var(--purple)"></div></div></div>
+          <div class="progress-row"><div class="pr-head"><span class="pr-label">Pakistan Stock Exchange</span><span class="pr-val">30%</span></div><div class="pr-track"><div class="pr-fill" style="width:30%;background:var(--blue)"></div></div></div>
+          <div class="progress-row"><div class="pr-head"><span class="pr-label">Gold / forex hedge</span><span class="pr-val">20%</span></div><div class="pr-track"><div class="pr-fill" style="width:20%;background:var(--amber)"></div></div></div>
+          <div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,0.25);line-height:1.5">Not financial advice. Based on PKR inflation &amp; your spending profile.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSACTIONS -->
+    <div id="sc-tx" class="screen">
+      <div class="page-header" style="padding-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start">
+        <div><div class="page-title">Transactions</div><div class="page-sub" id="tx-count-label">0 total</div></div>
+        <button style="background:rgba(0,200,150,0.1);border:0.5px solid rgba(0,200,150,0.25);border-radius:11px;padding:8px 13px;color:var(--green);font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font)" onclick="exportCSV()">Export CSV</button>
+      </div>
+      <div style="padding:0 16px 12px"><input class="fi" placeholder="🔍  Search…" oninput="filterTx(this.value)"></div>
+      <div class="tx-list" id="all-txlist"></div>
+    </div>
+
+  </div>
+
+  <!-- BOTTOM NAV (hidden during onboarding) -->
+  <div class="bottomnav" id="main-nav">
+    <button class="navitem on" id="nav-home" onclick="nav('sc-home','nav-home')">
+      <div class="navicon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+      <span class="navlabel">Home</span>
+    </button>
+    <button class="navitem" id="nav-add" onclick="nav('sc-add','nav-add')">
+      <div class="navicon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg></div>
+      <span class="navlabel">Add</span>
+    </button>
+    <button class="navitem" id="nav-chat" onclick="nav('sc-chat','nav-chat')" style="position:relative">
+      <div class="navicon"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg></div>
+      <div class="nav-dot show" id="nav-chat-dot"></div>
+      <span class="navlabel">Bot</span>
+    </button>
+    <button class="navitem" id="nav-scan" onclick="nav('sc-scan','nav-scan')">
+      <div class="navicon"><svg viewBox="0 0 24 24"><polyline points="23 7 23 1 17 1"/><polyline points="1 17 1 23 7 23"/><polyline points="23 17 23 23 17 23"/><polyline points="1 7 1 1 7 1"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg></div>
+      <span class="navlabel">Scan</span>
+    </button>
+    <button class="navitem" id="nav-advisor" onclick="nav('sc-advisor','nav-advisor')">
+      <div class="navicon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg></div>
+      <span class="navlabel">Advisor</span>
+    </button>
+  </div>
+
+</div>
+</div>
+
+<script>
+/* ============ CONFIG ============
+   Fill in for production deployment.
+   For demo mode (no auth), leave SUPABASE_URL empty.
+*/
+const BACKEND_URL = '';                    // e.g. 'https://your-app.up.railway.app'
+const SUPABASE_URL = '';                   // e.g. 'https://xxxxx.supabase.co'
+const SUPABASE_ANON_KEY = '';              // your anon key from Supabase
+
+/* ============ STATE ============ */
+let expenses = [];
+let nextId = 1;
+let scannedData = null;
+let isListening = false;
+let recognition = null;
+let debTimer = null;
+let selectedAvatar = '😎';
+let BUDGET = 50000;
+let INCOME = 80000;
+let USERNAME = 'Ahmed';
+
+const catEmoji={Food:'🍕',Transport:'🚗',Education:'📚',Shopping:'🛍️',Health:'💊',Entertainment:'🎬',Utilities:'⚡',Savings:'💰'};
+const catColors={Food:'#ff6b6b',Transport:'#4a9eff',Education:'#00c896',Shopping:'#f472b6',Health:'#9b8dff',Entertainment:'#ef9f27',Utilities:'#94a3b8',Savings:'#34d399'};
+
+/* ============ ONBOARDING ============ */
+function goSlide(n){
+  // Hide all screens
+  ['ob0','ob-signup','ob-login','ob1','ob2','ob3','ob4'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+  // Show requested screen
+  let targetId;
+  if(n==='signup') targetId='ob-signup';
+  else if(n==='login') targetId='ob-login';
+  else targetId='ob'+n;
+  const next=document.getElementById(targetId);
+  if(next) next.style.display='flex';
+  if(n===4) setTimeout(()=>{if(typeof prefillSetup==='function')prefillSetup();},50);
+}
+
+/* ============ SUPABASE AUTH ============ */
+// Initialize Supabase client (only if keys are configured)
+let sb = null;
+if (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY) {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+async function handleSignUp(){
+  const name=document.getElementById('su-name').value.trim();
+  const email=document.getElementById('su-email').value.trim();
+  const pass=document.getElementById('su-pass').value;
+  const errEl=document.getElementById('su-error');
+  const btn=document.getElementById('su-btn');
+  errEl.style.display='none';
+  if(!name){errEl.textContent='Please enter your name';errEl.style.display='block';return;}
+  if(!email||!email.includes('@')){errEl.textContent='Please enter a valid email';errEl.style.display='block';return;}
+  if(pass.length<6){errEl.textContent='Password must be at least 6 characters';errEl.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Creating account…';
+  try{
+    if(sb){
+      // Real Supabase signup
+      const {data,error}=await sb.auth.signUp({email,password:pass,options:{data:{name}}});
+      if(error) throw error;
+      // Save name locally so we don't lose it
+      USERNAME=name;
+      localStorage.setItem('spendly_user',JSON.stringify({name,email,setup:false}));
+    } else {
+      // Demo mode (no Supabase configured)
+      USERNAME=name;
+      localStorage.setItem('spendly_user',JSON.stringify({name,email,demo:true,setup:false}));
+    }
+    // Continue to feature tour for new users
+    goSlide(1);
+  }catch(err){
+    errEl.textContent=err.message||'Could not create account';
+    errEl.style.display='block';
+    btn.disabled=false;btn.textContent='Create account 🚀';
+  }
+}
+
+async function handleLogin(){
+  const email=document.getElementById('li-email').value.trim();
+  const pass=document.getElementById('li-pass').value;
+  const errEl=document.getElementById('li-error');
+  const btn=document.getElementById('li-btn');
+  errEl.style.display='none';
+  if(!email||!pass){errEl.textContent='Please fill in both fields';errEl.style.display='block';return;}
+  btn.disabled=true;btn.textContent='Logging in…';
+  try{
+    // Demo credentials shortcut
+    if(email==='demo@spendly.app'&&pass==='demo123'){
+      USERNAME='Demo User';BUDGET=50000;INCOME=80000;selectedAvatar='😎';
+      localStorage.setItem('spendly_user',JSON.stringify({name:'Demo User',email,demo:true,setup:true,budget:50000,income:80000,avatar:'😎'}));
+      finishOnboarding();return;
+    }
+    if(sb){
+      const {data,error}=await sb.auth.signInWithPassword({email,password:pass});
+      if(error) throw error;
+      const name=data.user.user_metadata?.name||email.split('@')[0];
+      USERNAME=name;
+      // Try to load profile from Supabase
+      const {data:prof}=await sb.from('profiles').select('*').eq('id',data.user.id).single();
+      if(prof){BUDGET=prof.budget||50000;INCOME=prof.income||80000;selectedAvatar=prof.avatar||'😎';}
+      localStorage.setItem('spendly_user',JSON.stringify({name,email,setup:true,budget:BUDGET,income:INCOME,avatar:selectedAvatar}));
+      finishOnboarding();
+    } else {
+      // No Supabase — restore from localStorage if exists
+      const saved=JSON.parse(localStorage.getItem('spendly_user')||'{}');
+      if(saved.email===email){
+        USERNAME=saved.name||'You';
+        finishOnboarding();
+      } else {
+        throw new Error('No account found. Please sign up first.');
+      }
+    }
+  }catch(err){
+    errEl.textContent=err.message||'Login failed';
+    errEl.style.display='block';
+    btn.disabled=false;btn.textContent='Log in';
+  }
+}
+
+async function logoutUser(){
+  if(confirm('Log out of Spendly?')){
+    if(sb){await sb.auth.signOut();}
+    localStorage.removeItem('spendly_user');
+    localStorage.removeItem('spendly_expenses');
+    location.reload();
+  }
+}
+
+function selAvatar(el, emoji){
+  document.querySelectorAll('.av-opt').forEach(a=>a.classList.remove('sel'));
+  el.classList.add('sel');
+  selectedAvatar=emoji;
+}
+
+async function completeSetup(){
+  const name=document.getElementById('ob-name').value.trim()||USERNAME||'Friend';
+  const budget=parseInt(document.getElementById('ob-budget').value)||50000;
+  const income=parseInt(document.getElementById('ob-income').value)||80000;
+  USERNAME=name; BUDGET=budget; INCOME=income;
+  const profile={name,budget,income,avatar:selectedAvatar,setup:true};
+  // Save to Supabase if available
+  if(sb){
+    try{
+      const {data:{user}}=await sb.auth.getUser();
+      if(user){
+        await sb.from('profiles').upsert({id:user.id,name,budget,income,avatar:selectedAvatar,updated_at:new Date().toISOString()});
+      }
+    }catch(e){console.log('Profile save skipped:',e.message);}
+  }
+  // Always save locally too
+  const existing=JSON.parse(localStorage.getItem('spendly_user')||'{}');
+  localStorage.setItem('spendly_user',JSON.stringify({...existing,...profile}));
+  finishOnboarding();
+}
+
+// Pre-fill name on setup screen if signed up
+function prefillSetup(){
+  const nameEl=document.getElementById('ob-name');
+  if(nameEl&&!nameEl.value&&USERNAME&&USERNAME!=='Ahmed'){nameEl.value=USERNAME;}
+}
+
+function applyUserProfile(){
+  const saved=JSON.parse(localStorage.getItem('spendly_user')||'{}');
+  if(saved.name){USERNAME=saved.name;BUDGET=saved.budget||50000;INCOME=saved.income||80000;selectedAvatar=saved.avatar||'😎';}
+  document.getElementById('h-username').textContent=USERNAME;
+  document.getElementById('h-avatar').textContent=selectedAvatar;
+  document.getElementById('h-budget-display').textContent='Rs '+BUDGET.toLocaleString();
+  // greeting by time
+  const h=new Date().getHours();
+  const g=h<12?'Good morning 👋':h<17?'Good afternoon ☀️':'Good evening 🌙';
+  document.getElementById('greeting').textContent=g;
+  // restore expenses
+  const saved2=localStorage.getItem('spendly_expenses');
+  if(saved2){expenses=JSON.parse(saved2);nextId=expenses.length?Math.max(...expenses.map(e=>e.id))+1:1;}
+}
+
+function saveExpensesToStorage(){
+  localStorage.setItem('spendly_expenses',JSON.stringify(expenses));
+}
+
+/* ============ CLOCK ============ */
+function initClock(){
+  function tick(){
+    const now=new Date();
+    document.getElementById('clock').textContent=now.toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:false});
+  }
+  tick();setInterval(tick,30000);
+}
+
+/* ============ NAV ============ */
+function nav(screen,navId){
+  document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active');});
+  document.querySelectorAll('.navitem').forEach(n=>n.classList.remove('on'));
+  const sc=document.getElementById(screen);
+  sc.classList.add('active');
+  if(navId){document.getElementById(navId).classList.add('on');}
+  if(navId==='nav-chat') document.getElementById('nav-chat-dot').classList.remove('show');
+  if(screen==='sc-tx') renderAllTx();
+  if(screen==='sc-home'){updateHomeStats();renderHomeTx();}
+  if(screen==='sc-advisor') updateAdvisor();
+  setTimeout(()=>sc.scrollTop=0,50);
+}
+
+/* ============ HOME STATS ============ */
+function getTotalSpent(){return expenses.reduce((a,b)=>a+b.amt,0);}
+
+function updateHomeStats(){
+  const t=getTotalSpent();
+  document.getElementById('h-total').textContent='Rs '+t.toLocaleString();
+  const left=Math.max(0,BUDGET-t);
+  document.getElementById('h-left').textContent='Rs '+left.toLocaleString()+' left';
+  const pct=Math.min(100,Math.round(t/BUDGET*100));
+  document.getElementById('h-pct').textContent=pct+'%';
+  const bar=document.getElementById('h-bar');
+  bar.style.width=pct+'%';
+  bar.style.background=pct>90?'#ff6b6b':pct>75?'#ef9f27':'#00c896';
+  document.getElementById('h-txc').textContent=expenses.length;
+  const botCount=expenses.filter(e=>e.src==='bot'||e.src==='voice').length;
+  document.getElementById('h-bot-count').textContent='+'+botCount+' via bot';
+  if(expenses.length>0){
+    const biggest=[...expenses].sort((a,b)=>b.amt-a.amt)[0];
+    document.getElementById('h-big-amt').textContent='Rs '+biggest.amt.toLocaleString();
+    document.getElementById('h-big-cat').textContent=biggest.desc.substring(0,16)+' — '+biggest.cat;
+    document.getElementById('chart-wrap').style.display='block';
+    document.getElementById('empty-state').style.display='none';
+    document.getElementById('h-tx-head').style.display='flex';
+    renderDonut();
+  } else {
+    document.getElementById('chart-wrap').style.display='none';
+    document.getElementById('empty-state').style.display='block';
+    document.getElementById('h-tx-head').style.display='none';
+  }
+  renderHomeTx();
+}
+
+function renderHomeTx(){
+  const el=document.getElementById('home-txlist');
+  const items=[...expenses].sort((a,b)=>b.id-a.id).slice(0,5);
+  el.innerHTML=items.map(txHTML).join('');
+}
+
+function txHTML(e){
+  const srcMap={bot:'src-w',voice:'src-v',scan:'src-s',app:'src-a'};
+  const srcLabel={bot:'Bot',voice:'Voice',scan:'Scan',app:'App'};
+  return`<div class="tx-item">
+    <div class="tx-ic" style="background:${catBg(e.cat)}">${catEmoji[e.cat]||'💰'}</div>
+    <div class="tx-info"><div class="tx-name">${e.desc}</div><div class="tx-cat">${e.cat} · ${e.date}</div></div>
+    <div class="tx-right"><div class="tx-amt">-Rs ${e.amt.toLocaleString()}</div><div class="tx-src ${srcMap[e.src]||'src-a'}">${srcLabel[e.src]||'App'}</div></div>
+  </div>`;
+}
+
+function catBg(cat){
+  const m={Food:'rgba(255,107,107,0.12)',Transport:'rgba(74,158,255,0.12)',Education:'rgba(0,200,150,0.12)',Shopping:'rgba(244,114,182,0.12)',Health:'rgba(155,141,255,0.12)',Entertainment:'rgba(239,159,39,0.12)',Utilities:'rgba(148,163,184,0.12)',Savings:'rgba(52,211,153,0.12)'};
+  return m[cat]||'rgba(255,255,255,0.07)';
+}
+
+/* ============ DONUT CHART ============ */
+function renderDonut(){
+  const totals={};
+  expenses.forEach(e=>{totals[e.cat]=(totals[e.cat]||0)+e.amt;});
+  const grand=Object.values(totals).reduce((a,b)=>a+b,0)||1;
+  const cats=Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const svg=document.getElementById('donut-chart');
+  const legend=document.getElementById('donut-legend');
+  const R=36,cx=50,cy=50,gap=2;
+  let angle=-90;
+  let arcs='<circle cx="50" cy="50" r="36" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="14"/>';
+  cats.forEach(([cat,val])=>{
+    const pct=val/grand;const sweep=pct*360-gap;if(sweep<=0)return;
+    const s=(angle)*Math.PI/180,en=(angle+sweep)*Math.PI/180;
+    const x1=cx+R*Math.cos(s),y1=cy+R*Math.sin(s),x2=cx+R*Math.cos(en),y2=cy+R*Math.sin(en);
+    const lg=sweep>180?1:0;const c=catColors[cat]||'#888';
+    arcs+=`<path d="M${x1.toFixed(1)} ${y1.toFixed(1)} A${R} ${R} 0 ${lg} 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${c}" stroke-width="14" stroke-linecap="round"/>`;
+    angle+=sweep+gap;
+  });
+  const grandK=grand>=1000?(grand/1000).toFixed(0)+'K':grand;
+  arcs+=`<text x="50" y="47" text-anchor="middle" fill="white" font-size="10" font-family="DM Mono,monospace" font-weight="500">${grandK}</text>`;
+  arcs+=`<text x="50" y="57" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="7" font-family="DM Mono,monospace">spent</text>`;
+  svg.innerHTML=arcs;
+  legend.innerHTML=cats.map(([cat,val])=>`<div class="leg-item"><div class="leg-dot" style="background:${catColors[cat]||'#888'}"></div><div class="leg-label">${cat}</div><div class="leg-val">${Math.round(val/grand*100)}%</div></div>`).join('');
+}
+
+/* ============ ADVISOR ============ */
+function updateAdvisor(){
+  const totals={};
+  expenses.forEach(e=>{totals[e.cat]=(totals[e.cat]||0)+e.amt;});
+  const grand=getTotalSpent();
+  // breakdown
+  const bk=document.getElementById('advisor-breakdown');
+  if(grand===0){bk.innerHTML='<div style="font-size:12px;color:var(--sub);padding:8px 0">Add some expenses to see your breakdown.</div>';return;}
+  const cats=Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+  const progressColors={Food:'var(--red)',Transport:'var(--blue)',Shopping:'#f472b6',Utilities:'var(--purple)',Entertainment:'var(--amber)',Health:'var(--purple)',Education:'var(--green)',Savings:'var(--green)'};
+  bk.innerHTML=cats.map(([cat,val])=>{
+    const pct=Math.round(val/grand*100);
+    return`<div class="progress-row"><div class="pr-head"><span class="pr-label">${cat}</span><span class="pr-val">${pct}% · Rs ${val.toLocaleString()}</span></div><div class="pr-track"><div class="pr-fill" style="width:${pct}%;background:${progressColors[cat]||'rgba(255,255,255,0.2)'}"></div></div></div>`;
+  }).join('');
+  // alerts
+  const foodPct=Math.round((totals['Food']||0)/grand*100);
+  document.getElementById('adv-food-alert').textContent=foodPct>35?`⚠ ${foodPct}% overspent`:foodPct+'% — ok';
+  document.getElementById('adv-food-alert').className='acm-val '+(foodPct>35?'bad':'good');
+  document.getElementById('adv-transport').textContent='Rs '+(totals['Transport']||0).toLocaleString();
+  const pct=Math.round(grand/BUDGET*100);
+  document.getElementById('adv-budget').textContent=pct<100?'On track ✓':pct+'% over budget';
+  document.getElementById('adv-budget').className='acm-val '+(pct<100?'good':'bad');
+  // save
+  const surplus=Math.max(0,INCOME-grand);
+  document.getElementById('adv-income').textContent='Rs '+INCOME.toLocaleString();
+  const saveRate=INCOME>0?Math.round(surplus/INCOME*100):0;
+  document.getElementById('adv-save-rate').textContent=saveRate+'% · Rs '+surplus.toLocaleString();
+  document.getElementById('adv-save-rate').className='acm-val '+(saveRate>=20?'good':'warn');
+  document.getElementById('adv-surplus').textContent='Rs '+surplus.toLocaleString()+'/mo';
+}
+
+function switchTab(tab){
+  ['spend','save','invest'].forEach(t=>{
+    document.getElementById('tab-'+t).classList.remove('on');
+    document.getElementById('panel-'+t).style.display='none';
+  });
+  document.getElementById('tab-'+tab).classList.add('on');
+  document.getElementById('panel-'+tab).style.display='block';
+  if(tab==='spend') updateAdvisor();
+}
+
+/* ============ ADD EXPENSE FORM ============ */
+function onDescInput(val){
+  clearTimeout(debTimer);
+  const box=document.getElementById('cat-box'),think=document.getElementById('ai-think');
+  if(val.length<4){box.classList.remove('show');think.style.display='none';return;}
+  think.style.display='flex';box.classList.remove('show');
+  debTimer=setTimeout(()=>classifyWithClaude(val),700);
+}
+
+async function classifyWithClaude(desc){
+  const think=document.getElementById('ai-think');
+  try{
+    const resp=await callClaude(`Classify this expense into exactly one category. Categories: Food, Transport, Education, Shopping, Health, Entertainment, Utilities, Savings. Description: "${desc}". Reply ONLY with JSON: {"category":"Food","confidence":"High"}`);
+    think.style.display='none';
+    const parsed=JSON.parse(resp);
+    showCatSuggestion(parsed.category,parsed.confidence||'High');
+    const sel=document.getElementById('f-cat');
+    for(let i=0;i<sel.options.length;i++){if(sel.options[i].value===parsed.category){sel.selectedIndex=i;break;}}
+  }catch(e){
+    think.style.display='none';
+    const lower=desc.toLowerCase();
+    let cat='Food';
+    if(/careem|taxi|uber|bus|metro|petrol|fuel/.test(lower))cat='Transport';
+    else if(/university|fee|tuition|school|college/.test(lower))cat='Education';
+    else if(/zara|clothes|mall|shirt|shoes|daraz/.test(lower))cat='Shopping';
+    else if(/doctor|pharmacy|medicine|hospital/.test(lower))cat='Health';
+    else if(/netflix|movie|game|cinema/.test(lower))cat='Entertainment';
+    else if(/electric|gas|water|internet|bill/.test(lower))cat='Utilities';
+    showCatSuggestion(cat,'Medium');
+    const sel=document.getElementById('f-cat');
+    for(let i=0;i<sel.options.length;i++){if(sel.options[i].value===cat){sel.selectedIndex=i;break;}}
+  }
+}
+
+function showCatSuggestion(cat,conf){
+  document.getElementById('cs-icon').textContent=catEmoji[cat]||'💰';
+  document.getElementById('cs-name').textContent=cat;
+  document.getElementById('cs-conf').textContent=conf+' confidence';
+  document.getElementById('cat-box').classList.add('show');
+}
+
+function saveExpense(){
+  const desc=document.getElementById('f-desc').value.trim();
+  const amt=parseInt(document.getElementById('f-amt').value);
+  const cat=document.getElementById('f-cat').value||'Food';
+  const date=document.getElementById('f-date').value||today();
+  const emo=document.getElementById('f-emo').value;
+  if(!desc||!amt||amt<1){showToast('Fill description and amount');return;}
+  pushExpense({desc,cat,amt,date,src:'app',emo});
+  document.getElementById('f-desc').value='';
+  document.getElementById('f-amt').value='';
+  document.getElementById('cat-box').classList.remove('show');
+  document.getElementById('f-cat').selectedIndex=0;
+  showToast('Expense saved ✓');
+}
+
+function today(){return new Date().toISOString().split('T')[0];}
+function pushExpense(e){expenses.push({id:nextId++,...e});saveExpensesToStorage();updateHomeStats();}
+
+/* ============ SCAN ============ */
+function demoScan(type){
+  const demos={
+    food:{merchant:'The Coffee House',amount:'Rs 1,240',category:'Food',date:today(),items:'Cappuccino ×2, Croissant ×1'},
+    fuel:{merchant:'PSO Petrol Station',amount:'Rs 3,500',category:'Transport',date:today(),items:'Petrol 10 litres'},
+    edu:{merchant:'FAST University',amount:'Rs 42,000',category:'Education',date:today(),items:'Spring 2024 tuition fee'}
+  };
+  scannedData=demos[type];
+  document.getElementById('scan-fields').innerHTML=Object.entries(scannedData).map(([k,v])=>`<div class="scan-field"><span class="sf-key">${k.charAt(0).toUpperCase()+k.slice(1)}</span><span class="sf-val">${v}</span></div>`).join('');
+  document.getElementById('scan-result').classList.add('show');
+}
+
+async function handleFile(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    const base64=e.target.result.split(',')[1];
+    document.getElementById('scan-fields').innerHTML='<div class="load-ai"><div class="load-ring"></div><div class="load-text">Claude is reading the receipt…</div></div>';
+    document.getElementById('scan-result').classList.add('show');
+    try{
+      const data=await callClaudeVision(base64,file.type,'Extract receipt info. Reply ONLY with JSON: {"merchant":"name","amount":"Rs X,XXX","category":"Food|Transport|Education|Shopping|Health|Entertainment|Utilities","date":"YYYY-MM-DD","items":"brief description"}');
+      scannedData=JSON.parse(data);
+      document.getElementById('scan-fields').innerHTML=Object.entries(scannedData).map(([k,v])=>`<div class="scan-field"><span class="sf-key">${k.charAt(0).toUpperCase()+k.slice(1)}</span><span class="sf-val">${v}</span></div>`).join('');
+    }catch(err){document.getElementById('scan-fields').innerHTML='<div style="font-size:12px;color:var(--sub);padding:8px 0">Could not read receipt. Try a demo above.</div>';}
+  };
+  reader.readAsDataURL(file);
+}
+
+function handleDrop(e){
+  e.preventDefault();document.getElementById('drop-zone').classList.remove('drag');
+  const file=e.dataTransfer.files[0];
+  if(file){const inp=document.getElementById('file-inp');const dt=new DataTransfer();dt.items.add(file);inp.files=dt.files;handleFile(inp);}
+}
+
+function addFromScan(){
+  if(!scannedData)return;
+  const amt=parseInt((scannedData.amount||'0').replace(/\D/g,''));
+  if(!amt){showToast('No amount found');return;}
+  pushExpense({desc:scannedData.merchant||'Scanned receipt',cat:scannedData.category||'Food',amt,date:scannedData.date||today(),src:'scan',emo:''});
+  document.getElementById('scan-result').classList.remove('show');
+  scannedData=null;
+  showToast('Receipt added ✓');
+}
+
+/* ============ TRANSACTIONS ============ */
+function renderAllTx(filter=''){
+  const el=document.getElementById('all-txlist');
+  const items=[...expenses].sort((a,b)=>b.id-a.id).filter(e=>!filter||e.desc.toLowerCase().includes(filter)||e.cat.toLowerCase().includes(filter));
+  document.getElementById('tx-count-label').textContent=items.length+' total';
+  el.innerHTML=items.length?items.map(txHTML).join(''):'<div style="padding:32px 0;text-align:center;font-size:12px;color:var(--sub)">No transactions yet</div>';
+}
+function filterTx(v){renderAllTx(v.toLowerCase());}
+function exportCSV(){
+  const rows=[['Description','Category','Amount','Date','Source'],...expenses.map(e=>[e.desc,e.cat,e.amt,e.date,e.src])];
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n'));
+  a.download='spendly_export.csv';a.click();
+}
+
+/* ============ API HELPERS ============ */
+async function callClaude(prompt){
+  // If backend URL set, use it; otherwise call Anthropic directly (demo mode)
+  if(BACKEND_URL){
+    const r=await fetch(BACKEND_URL+'/api/classify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    const d=await r.json();return d.result;
+  }
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:150,messages:[{role:'user',content:prompt}]})});
+  const d=await r.json();
+  const txt=d.content[0].text.replace(/```json|```/g,'').trim();
+  return txt;
+}
+
+async function callClaudeVision(base64,mediaType,prompt){
+  if(BACKEND_URL){
+    const r=await fetch(BACKEND_URL+'/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base64,mediaType,prompt})});
+    const d=await r.json();return d.result;
+  }
+  const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:mediaType,data:base64}},{type:'text',text:prompt}]}]})});
+  const d=await r.json();
+  return d.content[0].text.replace(/```json|```/g,'').trim();
+}
+
+/* ============ BOT CHAT ============ */
+const BOT_SYSTEM=`You are Spendly, a smart expense tracking assistant for Pakistani users. Users type expenses casually in English or Roman Urdu. Extract expense details and return clean structured data.
+
+CRITICAL RULES:
+1. "description" must be a CLEAN human-readable merchant or item name. NEVER include numbers. Strip all digits. Capitalize properly.
+   - "2000kfc" → "KFC"
+   - "makki oil 2000" → "Makki Oil"
+   - "1500careem" → "Careem Ride"
+   - "paid 850 pizza hut" → "Pizza Hut"
+
+2. "amount" is a plain PKR number only. No Rs symbol, no commas.
+
+3. "category" — be precise:
+   - Food: restaurants, cafes, KFC, McDonald, pizza, biryani, chai, any eating/drinking out
+   - Transport: Careem, Uber, petrol, fuel, bus, metro, rickshaw, parking
+   - Shopping: clothes, shoes, Zara, mall, groceries, cooking oil, makki oil, ghee, atta, supermarket, daraz
+   - Utilities: electricity, gas bill, water bill, internet, phone recharge, PTCL
+   - Health: pharmacy, doctor, medicine, hospital
+   - Entertainment: Netflix, cinema, game, Spotify
+   - Education: university fee, school fee, books, tuition
+   - Savings: saving, investment, deposit
+   NOTE: Household items like makki oil, cooking oil, ghee, atta = Shopping (not Food). Food = eating out.
+
+4. "reply" is warm, short, 1 sentence, WhatsApp-style. Mention clean name + amount. 1 emoji.
+5. If no amount found or just greeting → understood: false.
+
+Respond with ONLY valid JSON, no markdown:
+{"understood":true,"description":"Clean Name","amount":1234,"category":"Food","reply":"Friendly reply"}
+
+EXAMPLES:
+"2000kfc" → {"understood":true,"description":"KFC","amount":2000,"category":"Food","reply":"KFC logged! 🍗 Rs 2,000 added."}
+"makki oil 2000" → {"understood":true,"description":"Makki Oil","amount":2000,"category":"Shopping","reply":"Grocery saved! 🛒 Rs 2,000 for Makki Oil."}
+"careem 1200" → {"understood":true,"description":"Careem Ride","amount":1200,"category":"Transport","reply":"Ride logged! 🚗 Rs 1,200 for Careem."}
+"petrol 3500" → {"understood":true,"description":"Petrol","amount":3500,"category":"Transport","reply":"Fuelled up! ⛽ Rs 3,500 added."}
+"electricity 4800" → {"understood":true,"description":"Electricity Bill","amount":4800,"category":"Utilities","reply":"Bill saved ⚡ Rs 4,800."}
+"netflix 1100" → {"understood":true,"description":"Netflix","amount":1100,"category":"Entertainment","reply":"Netflix logged! 🎬 Rs 1,100 added."}
+"zara shirt 4800" → {"understood":true,"description":"Zara Shirt","amount":4800,"category":"Shopping","reply":"Shopping added! 🛍️ Rs 4,800 for Zara."}
+"hello" → {"understood":false,"description":"","amount":null,"category":"Food","reply":"Hey! 👋 Tell me what you spent, e.g. 'KFC 850' or 'petrol 3500'"}
+"chai 80" → {"understood":true,"description":"Chai","amount":80,"category":"Food","reply":"Chai tax! ☕ Rs 80 logged."}`;
+
+let msgCount=0;
+function chatTime(){return new Date().toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:true});}
+
+function addBotGreeting(){
+  addBotMsg(`Hey ${USERNAME}! 👋 I'm your Spendly bot. Type what you spent and I'll log it instantly — like "KFC 850" or "petrol 3500". You can also tap 🎤 to speak!`);
+}
+
+function addBotMsg(text,card=null){
+  const msgs=document.getElementById('chat-messages');
+  const cardHTML=card?`<div class="msg-expense-card">
+    <div class="mec-row"><span class="mec-label">Item</span><span class="mec-val">${card.desc}</span></div>
+    <div class="mec-row"><span class="mec-label">Amount</span><span class="mec-val">Rs ${card.amt.toLocaleString()}</span></div>
+    <div class="mec-row"><span class="mec-label">Category</span><span class="mec-val">${catEmoji[card.cat]||''} ${card.cat}</span></div>
+  </div>`:'';
+  const div=document.createElement('div');div.className='msg bot';
+  div.innerHTML=`<div class="msg-bubble">${text}${cardHTML}</div><div class="msg-time">${chatTime()}</div>`;
+  const typing=document.getElementById('typing-bubble');
+  msgs.insertBefore(div,typing);
+  scrollChat();
+}
+
+function addUserMsg(text){
+  const msgs=document.getElementById('chat-messages');
+  const div=document.createElement('div');div.className='msg user';
+  div.innerHTML=`<div class="msg-bubble">${text}</div><div class="msg-time">${chatTime()}</div>`;
+  const typing=document.getElementById('typing-bubble');
+  msgs.insertBefore(div,typing);
+  scrollChat();
+}
+
+function showTyping(show){
+  const t=document.getElementById('typing-bubble');
+  t.className='typing-bubble'+(show?' show':'');
+  scrollChat();
+}
+
+function scrollChat(){setTimeout(()=>{const m=document.getElementById('chat-messages');m.scrollTop=m.scrollHeight;},60);}
+
+async function sendChatMessage(){
+  const input=document.getElementById('chat-input');
+  const text=input.value.trim();if(!text)return;
+  input.value='';input.style.height='';
+  addUserMsg(text);showTyping(true);
+  try{
+    let raw;
+    if(BACKEND_URL){
+      const r=await fetch(BACKEND_URL+'/api/bot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,system:BOT_SYSTEM})});
+      const d=await r.json();raw=d.result;
+    } else {
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,system:BOT_SYSTEM,messages:[{role:'user',content:text}]})});
+      const d=await r.json();raw=d.content[0].text.replace(/```json|```/g,'').trim();
+    }
+    showTyping(false);
+    const parsed=JSON.parse(raw);
+    let card=null;
+    if(parsed.understood&&parsed.amount&&parsed.amount>0){
+      const e={desc:parsed.description||text,cat:parsed.category||'Food',amt:parsed.amount,date:today(),src:'bot',emo:''};
+      pushExpense(e);card=e;
+    }
+    addBotMsg(parsed.reply||'Got it! ✓',card);
+  }catch(err){
+    showTyping(false);
+    const amtMatch=text.match(/\d+/);const amt=amtMatch?parseInt(amtMatch[0]):0;
+    if(amt>0){const e={desc:text,cat:'Food',amt,date:today(),src:'bot',emo:''};pushExpense(e);addBotMsg(`Added Rs ${amt.toLocaleString()} ✓`,e);}
+    else addBotMsg("Hmm, I couldn't connect. Try: 'KFC 850' 🙏");
+  }
+}
+
+function chipSend(text){document.getElementById('chat-input').value=text;sendChatMessage();}
+function chatKeydown(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChatMessage();}}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,90)+'px';}
+
+/* ============ VOICE ============ */
+function toggleVoice(){
+  if(!('SpeechRecognition' in window||'webkitSpeechRecognition' in window)){showToast('Voice not supported here');return;}
+  if(isListening){stopVoice();return;}
+  recognition=new (window.SpeechRecognition||window.webkitSpeechRecognition)();
+  recognition.lang='en-PK';recognition.interimResults=false;recognition.maxAlternatives=1;
+  recognition.onstart=()=>{isListening=true;document.getElementById('mic-btn').classList.add('listening');document.getElementById('voice-banner').classList.add('show');};
+  recognition.onresult=(e)=>{document.getElementById('chat-input').value=e.results[0][0].transcript;stopVoice();setTimeout(()=>sendChatMessage(),300);};
+  recognition.onerror=recognition.onend=()=>stopVoice();
+  recognition.start();
+}
+function stopVoice(){isListening=false;document.getElementById('mic-btn').classList.remove('listening');document.getElementById('voice-banner').classList.remove('show');if(recognition)try{recognition.stop();}catch(e){}}
+
+/* ============ TOAST ============ */
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400);}
+
+/* ============ INIT ============ */
+document.getElementById('f-date').value=today();
+document.getElementById('main-nav').style.display='none';
+
+async function initApp(){
+  // 1. Check Supabase session first (if configured)
+  if(sb){
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      if(session){
+        // User is logged in via Supabase — load profile
+        const userMeta=session.user.user_metadata||{};
+        const {data:prof}=await sb.from('profiles').select('*').eq('id',session.user.id).single();
+        if(prof){
+          USERNAME=prof.name;BUDGET=prof.budget;INCOME=prof.income;selectedAvatar=prof.avatar;
+          localStorage.setItem('spendly_user',JSON.stringify({...prof,email:session.user.email,setup:true}));
+          document.getElementById('onboarding').classList.add('hidden');
+          document.getElementById('main-nav').style.display='flex';
+          applyUserProfile();initClock();updateHomeStats();addBotGreeting();
+          return;
+        } else {
+          // Logged in but no profile — show setup
+          USERNAME=userMeta.name||session.user.email.split('@')[0];
+          goSlide(1);return;
+        }
+      }
+    }catch(e){console.log('No session:',e.message);}
+  }
+  // 2. Check localStorage (works for demo mode)
+  const saved=localStorage.getItem('spendly_user');
+  if(saved){
+    const u=JSON.parse(saved);
+    if(u.setup){
+      // Returning user with setup done
+      document.getElementById('onboarding').classList.add('hidden');
+      document.getElementById('main-nav').style.display='flex';
+      applyUserProfile();initClock();updateHomeStats();addBotGreeting();
+      return;
+    } else if(u.name){
+      // Signed up but didn't finish setup
+      USERNAME=u.name;
+      goSlide(1);return;
+    }
+  }
+  // 3. Brand new user — show welcome
+  goSlide(0);
+}
+
+function finishOnboarding(){
+  document.getElementById('onboarding').classList.add('hidden');
+  document.getElementById('main-nav').style.display='flex';
+  applyUserProfile();initClock();updateHomeStats();addBotGreeting();
+}
+
+initApp();
+</script>
+</body>
+</html>
