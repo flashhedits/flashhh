@@ -1,0 +1,10 @@
+# Secret Keys
+.env
+*.env
+
+# Folders we don't need to upload
+node_modules/
+.DS_Store
+
+# Logs
+npm-debug.log*
